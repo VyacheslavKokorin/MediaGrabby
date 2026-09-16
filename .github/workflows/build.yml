@@ -1,0 +1,81 @@
+name: Build MediaGrabby
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            platform: x64
+          - arch: x86
+            platform: Win32
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure build
+        run: cmake -S . -B build -A ${{ matrix.platform }}
+      - name: Build executable
+        run: cmake --build build --config Release --parallel
+      - name: Test commands, processes and terminal
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Test components and media downloads
+        shell: pwsh
+        run: |
+          python tests/proxy_harness.py fixtures build/Release/integration_tests.exe '${{ matrix.arch }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Proxy integration tests failed' }
+      - name: Test and capture interface
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: .\scripts\capture-ui.ps1
+      - name: Package portable app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist\MediaGrabby | Out-Null
+          Copy-Item build\Release\MediaGrabby.exe dist\MediaGrabby\
+          Copy-Item readme.txt dist\MediaGrabby\
+          Compress-Archive -Path dist\MediaGrabby\* -DestinationPath "dist\MediaGrabby-windows-${{ matrix.arch }}.zip"
+          $hash = (Get-FileHash "dist\MediaGrabby-windows-${{ matrix.arch }}.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  MediaGrabby-windows-${{ matrix.arch }}.zip" | Set-Content -Encoding ascii "dist\MediaGrabby-windows-${{ matrix.arch }}.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MediaGrabby-windows-${{ matrix.arch }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.arch == 'x64'
+        with:
+          name: MediaGrabby-ui
+          path: screenshots/
+          if-no-files-found: ignore
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: MediaGrabby-windows-*
+          path: dist
+          merge-multiple: true
+      - name: Publish portable builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          tag="v0.1.$GITHUB_RUN_NUMBER"
+          gh release create "$tag" dist/* --target "$COMMIT_SHA" --title "MediaGrabby $tag" --notes "Portable for Windows 10 (x86/x64) and Windows 11 (x64). Extract the ZIP and run MediaGrabby.exe. Components download on first launch. English is the default language; Russian is available in Settings."

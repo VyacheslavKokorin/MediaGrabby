@@ -1,0 +1,32 @@
+build*/
+.vs/
+.vscode/
+.idea/
+components/
+logs/
+screenshots/
+fixtures/
+dist/
+
+# Local application settings and state
+settings.json
+appearance.json
+proxy.json
+.mediagrabby-history.json
+.MediaGrabby-work/
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Generated packages and logs
+*.zip
+*.log
+
+# CMake / IDE user-local files
+CMakeUserPresets.json
