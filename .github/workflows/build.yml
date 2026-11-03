@@ -60,7 +60,8 @@ jobs:
           python tests/proxy_harness.py fixtures build/Release/integration_tests.exe '${{ matrix.arch }}'
           if ($LASTEXITCODE -ne 0) { throw 'Proxy integration tests failed' }
   release:
-    if: github.event_name == 'workflow_dispatch'
+    # A release commit publishes the builds after all checks pass.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'Release '))
     needs: build
     runs-on: ubuntu-latest
     permissions:
