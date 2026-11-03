@@ -19,6 +19,8 @@ namespace {
 LRESULT CALLBACK skin(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data){
     auto& p=*(Palette*)data;wchar_t cls[32]{};GetClassNameW(h,cls,32);bool combo=wcscmp(cls,L"ComboBox")==0;bool edit=wcscmp(cls,L"Edit")==0;
     bool check=wcscmp(cls,L"Button")==0&&(GetWindowLongPtrW(h,GWL_STYLE)&BS_TYPEMASK)==BS_AUTOCHECKBOX;
+    // Standard single-line edit controls do not implement Ctrl+A.
+    if(edit&&m==WM_CHAR&&w==1){SendMessageW(h,EM_SETSEL,0,-1);return 0;}
     if(m==WM_NCDESTROY)RemoveWindowSubclass(h,skin,id);
     if(m==WM_NCPAINT&&edit){auto result=DefSubclassProc(h,m,w,l);HDC dc=GetWindowDC(h);RECT r;GetWindowRect(h,&r);OffsetRect(&r,-r.left,-r.top);auto b=CreateSolidBrush(GetFocus()==h?p.accent:p.border);FrameRect(dc,&r,b);DeleteObject(b);ReleaseDC(h,dc);return result;}
     if(m==WM_PAINT&&(combo||check)){

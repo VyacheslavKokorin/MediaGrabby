@@ -55,3 +55,8 @@ target_link_libraries(integration_tests PRIVATE mg_platform)
 add_executable(terminal_tests tests/terminal_tests.cpp src/terminal.cpp)
 target_link_libraries(terminal_tests PRIVATE mg_platform comctl32)
 add_test(NAME terminal COMMAND terminal_tests)
+
+add_executable(input_tests tests/input_tests.cpp src/terminal.cpp src/appearance.cpp src/proxy_dialog.cpp src/components.cpp src/download.cpp)
+target_include_directories(input_tests PRIVATE resources)
+target_link_libraries(input_tests PRIVATE mg_platform comctl32 uxtheme dwmapi comdlg32)
+add_test(NAME input COMMAND input_tests)

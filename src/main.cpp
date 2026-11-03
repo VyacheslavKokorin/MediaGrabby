@@ -28,7 +28,7 @@ struct App {
     HBRUSH bgBrush=nullptr,fieldBrush=nullptr,cardBrush=nullptr;Appearance appearance;Palette palette=paletteFor(appearance);
     std::map<int,std::wstring> captions;std::map<int,std::vector<std::wstring>> comboValues;bool retryShown=false;
     COLORREF bg=RGB(18,22,30),field=RGB(29,35,47),fg=RGB(231,236,245),muted=RGB(156,169,190),accent=RGB(94,130,255);
-    fs::path root=programDir(),lastFile;ComponentManager cm{root};Options options,lastAttempt;bool canRetry=false,proxyLoadError=false;
+    fs::path root=programDir(),lastFile;ComponentManager cm{root};Options options;bool canRetry=false,proxyLoadError=false;
     std::atomic_bool cancel{false};std::thread worker;bool busy=false,closing=false,expanded=false,dark=true,preview=false;
     std::mutex logMutex;std::ofstream logfile;int dpi=96;bool starting=true;
     int px(int x)const{return MulDiv(x,dpi,96);}
@@ -219,12 +219,12 @@ struct App {
             post(2,L"");
         });
     }
-    void startDownload(bool retry=false){
-        auto o=retry&&canRetry?lastAttempt:collect();
+    void startDownload(){
+        auto o=collect();
         if(!validUrl(o.url)){MessageBoxW(window,tr(L"Enter a complete video or playlist URL."),L"MediaGrabby",MB_ICONINFORMATION);SetFocus(get(URL));return;}
         if(o.folder.empty()){MessageBoxW(window,tr(L"Choose a save folder."),L"MediaGrabby",MB_ICONINFORMATION);return;}
         try{save();}catch(const std::exception& e){MessageBoxW(window,wide(e.what()).c_str(),L"MediaGrabby",MB_ICONERROR);return;}
-        lastAttempt=o;canRetry=true;retryShown=false;SetWindowTextW(get(START),tr(L"Download"));
+        canRetry=true;retryShown=false;SetWindowTextW(get(START),tr(L"Download"));
         async([this,o]{
             auto r=download(o,cm,cancel,[this](auto s){log(s);},[this](auto s,int p){status(s,p);},[this](auto p){post(3,p.wstring());});
             status(r.failed?tr(L"Errors: ")+std::to_wstring(r.failed)+L". "+r.lastError:tr(L"Done. Downloaded: ")+std::to_wstring(r.completed)+tr(L" · Skipped: ")+std::to_wstring(r.skipped),r.failed?-2:100);
@@ -268,7 +268,9 @@ struct App {
         }else if(e.kind==3){lastFile=e.text;EnableWindow(get(OPEN_FILE),TRUE);}
     }
     void command(int id,int notification){
-        (void)notification;
+        if((id==URL||id==FOLDER)&&notification==EN_CHANGE){
+            canRetry=false;retryShown=false;SetWindowTextW(get(START),tr(L"Download"));return;
+        }
         if(id==COPY_LOG){
             auto value=text(TERMINAL);if(OpenClipboard(window)){EmptyClipboard();auto h=GlobalAlloc(GMEM_MOVEABLE,(value.size()+1)*sizeof(wchar_t));
                 if(h){auto p=GlobalLock(h);if(p){memcpy(p,value.c_str(),(value.size()+1)*sizeof(wchar_t));GlobalUnlock(h);if(!SetClipboardData(CF_UNICODETEXT,h))GlobalFree(h);}else GlobalFree(h);}CloseClipboard();}return;
@@ -288,7 +290,7 @@ struct App {
         if(id==OPEN_FOLDER){shellOpen(!lastFile.empty()?lastFile.parent_path():fs::path(text(FOLDER)));return;}
         if(id==OPEN_FILE){shellOpen(lastFile);return;}
         if(busy)return;
-        if(id==START)startDownload(retryShown);
+        if(id==START)startDownload();
         else if(id==BROWSE)chooseFolder();
         else if(id==PASTE&&OpenClipboard(window)){
             if(HANDLE h=GetClipboardData(CF_UNICODETEXT)){auto p=(wchar_t*)GlobalLock(h);if(p){SetWindowTextW(get(URL),trim(p).c_str());GlobalUnlock(h);}}CloseClipboard();
